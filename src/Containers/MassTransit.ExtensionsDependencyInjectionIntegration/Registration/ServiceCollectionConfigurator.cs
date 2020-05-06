@@ -16,19 +16,23 @@ namespace MassTransit.ExtensionsDependencyInjectionIntegration.Registration
         IServiceCollectionConfigurator
     {
         public ServiceCollectionConfigurator(IServiceCollection collection)
-            : base(new DependencyInjectionContainerRegistrar(collection))
+            : this(collection, new DependencyInjectionContainerRegistrar(collection))
         {
-            Collection = collection;
-
-            AddMassTransitComponents(collection);
-
             collection.AddSingleton<IRegistrationConfigurator>(this);
             collection.AddSingleton(provider => CreateRegistration(provider.GetRequiredService<IConfigurationServiceProvider>()));
         }
 
+        protected ServiceCollectionConfigurator(IServiceCollection collection, IContainerRegistrar registrar)
+            : base(registrar)
+        {
+            Collection = collection;
+
+            AddMassTransitComponents(collection);
+        }
+
         public IServiceCollection Collection { get; }
 
-        public void AddBus(Func<IServiceProvider, IBusControl> busFactory)
+        public virtual void AddBus(Func<IServiceProvider, IBusControl> busFactory)
         {
             IBusControl BusFactory(IServiceProvider serviceProvider)
             {
@@ -39,11 +43,10 @@ namespace MassTransit.ExtensionsDependencyInjectionIntegration.Registration
                 return busFactory(serviceProvider);
             }
 
-            Collection.TryAddSingleton(BusFactory);
-
+            Collection.AddSingleton(BusFactory);
             Collection.AddSingleton<IBus>(provider => provider.GetRequiredService<IBusControl>());
-
-            Collection.AddSingleton(provider => ClientFactoryProvider(provider.GetRequiredService<IConfigurationServiceProvider>()));
+            Collection.AddSingleton(provider => ClientFactoryProvider(provider.GetRequiredService<IConfigurationServiceProvider>(),
+                provider.GetRequiredService<IBus>()));
         }
 
         public void AddMediator(Action<IServiceProvider, IReceiveEndpointConfigurator> configure = null)
@@ -66,17 +69,17 @@ namespace MassTransit.ExtensionsDependencyInjectionIntegration.Registration
             Collection.AddSingleton<IClientFactory>(provider => provider.GetRequiredService<IMediator>());
         }
 
-        static void AddMassTransitComponents(IServiceCollection collection)
+        void AddMassTransitComponents(IServiceCollection collection)
         {
-            collection.AddScoped<ScopedConsumeContextProvider>();
-            collection.AddScoped(provider => provider.GetRequiredService<ScopedConsumeContextProvider>().GetContext() ?? new MissingConsumeContext());
+            collection.TryAddScoped<ScopedConsumeContextProvider>();
+            collection.TryAddScoped(provider => provider.GetRequiredService<ScopedConsumeContextProvider>().GetContext() ?? new MissingConsumeContext());
 
-            collection.AddScoped(GetCurrentSendEndpointProvider);
-            collection.AddScoped(GetCurrentPublishEndpoint);
+            Collection.TryAddScoped(GetCurrentSendEndpointProvider);
+            Collection.TryAddScoped(GetCurrentPublishEndpoint);
 
-            collection.AddSingleton<IConsumerScopeProvider>(provider => new DependencyInjectionConsumerScopeProvider(provider));
-            collection.AddSingleton<ISagaRepositoryFactory>(provider => new DependencyInjectionSagaRepositoryFactory(provider));
-            collection.AddSingleton<IConfigurationServiceProvider>(provider => new DependencyInjectionConfigurationServiceProvider(provider));
+            collection.TryAddSingleton<IConsumerScopeProvider>(provider => new DependencyInjectionConsumerScopeProvider(provider));
+            collection.TryAddSingleton<ISagaRepositoryFactory>(provider => new DependencyInjectionSagaRepositoryFactory(provider));
+            collection.TryAddSingleton<IConfigurationServiceProvider>(provider => new DependencyInjectionConfigurationServiceProvider(provider));
         }
 
         static ISendEndpointProvider GetCurrentSendEndpointProvider(IServiceProvider provider)

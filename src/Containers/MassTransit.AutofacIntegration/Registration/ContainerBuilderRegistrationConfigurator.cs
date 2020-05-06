@@ -2,7 +2,6 @@ namespace MassTransit.AutofacIntegration.Registration
 {
     using System;
     using Autofac;
-    using GreenPipes;
     using MassTransit.Registration;
     using Mediator;
     using ScopeProviders;
@@ -90,7 +89,7 @@ namespace MassTransit.AutofacIntegration.Registration
                 .As<IPublishEndpoint>()
                 .InstancePerLifetimeScope();
 
-            _builder.Register(context => ClientFactoryProvider(context.Resolve<IConfigurationServiceProvider>()))
+            _builder.Register(context => ClientFactoryProvider(context.Resolve<IConfigurationServiceProvider>(), context.Resolve<IBus>()))
                 .As<IClientFactory>()
                 .SingleInstance();
         }
