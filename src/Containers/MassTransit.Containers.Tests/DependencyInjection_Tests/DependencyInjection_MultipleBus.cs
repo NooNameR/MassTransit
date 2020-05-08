@@ -2,10 +2,10 @@ namespace MassTransit.Containers.Tests.DependencyInjection_Tests
 {
     using System;
     using System.Threading.Tasks;
-    using MultipleBusRegistration;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.DependencyInjection.Extensions;
     using Microsoft.Extensions.Logging;
+    using MultipleBusRegistration;
     using NUnit.Framework;
     using Registration;
     using Scenarios;
@@ -42,6 +42,7 @@ namespace MassTransit.Containers.Tests.DependencyInjection_Tests
                 {
                     cfg.Host(new Uri("loopback://bus-one/"));
                     cfg.ConfigureEndpoints(context);
+                    cfg.UseHealthCheck(context);
                 }));
             });
 
@@ -53,6 +54,7 @@ namespace MassTransit.Containers.Tests.DependencyInjection_Tests
                     cfg.Host(new Uri("loopback://bus-two/"));
 
                     cfg.ConfigureEndpoints(context);
+                    cfg.UseHealthCheck(context);
                 }));
             });
 

@@ -1,16 +1,11 @@
 namespace MassTransit
 {
-    using System;
-    using System.Collections.Generic;
-    using System.Linq;
     using AspNetCoreIntegration;
-    using AspNetCoreIntegration.HealthChecks;
-    using Internals.Extensions;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.Diagnostics.HealthChecks;
     using Microsoft.Extensions.Hosting;
+    using Microsoft.Extensions.Options;
     using Monitoring.Health;
-    using Registration;
 
 
     /// <summary>
@@ -39,25 +34,9 @@ namespace MassTransit
 
         static void AddHealthChecks(IServiceCollection services)
         {
-            var builder = services.AddHealthChecks();
-
-            var tags = new[] {"ready"};
-
-            if (services.Any(x => x.ServiceType == typeof(IBusHealth)))
-                builder.AddCheck<BusHealthCheck>("bus", HealthStatus.Unhealthy, tags);
-
-            foreach (var descriptor in services)
-            {
-                if (descriptor.ServiceType != null
-                    && descriptor.ServiceType.ClosesType(typeof(Bind<,>), out Type[] types)
-                    && types[1] == typeof(BusHealth))
-                {
-                    var healthCheckType = typeof(BusHealthCheck<>).MakeGenericType(types[0]);
-
-                    builder.Add(new HealthCheckRegistration($"bus-{types[0]}", s => (IHealthCheck)ActivatorUtilities.CreateInstance(s, healthCheckType),
-                        HealthStatus.Unhealthy, tags));
-                }
-            }
+            services.AddHealthChecks();
+            services.AddSingleton<IConfigureOptions<HealthCheckServiceOptions>>(provider =>
+                new BusHealthCheckOptionsConfigurator(provider.GetServices<IBusHealth>(), new[] {"ready"}));
         }
     }
 }

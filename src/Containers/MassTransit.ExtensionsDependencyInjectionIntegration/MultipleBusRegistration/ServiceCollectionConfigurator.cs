@@ -52,6 +52,7 @@ namespace MassTransit.ExtensionsDependencyInjectionIntegration.MultipleBusRegist
                 provider.GetRequiredService<IConfigurationServiceProvider>(), provider.GetRequiredService<TBus>())));
 
             Collection.AddSingleton(provider => Bind<TBus>.Create(new BusHealth(typeof(TBus).Name)));
+            Collection.AddSingleton(provider => provider.GetRequiredService<Bind<TBus, IBusHealth>>().Value);
 
             Collection.AddSingleton<BusRegistryInstance<TBus>>();
             Collection.AddSingleton<IBusRegistryInstance>(provider => provider.GetRequiredService<BusRegistryInstance<TBus>>());
