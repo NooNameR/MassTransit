@@ -3,7 +3,7 @@ namespace MassTransit.ExtensionsDependencyInjectionIntegration.MultipleBusRegist
     using System;
     using MassTransit.Registration;
     using Microsoft.Extensions.DependencyInjection;
-    using Microsoft.Extensions.DependencyInjection.Extensions;
+    using Monitoring.Health;
     using Registration;
     using Scoping;
     using Transports;
@@ -15,13 +15,11 @@ namespace MassTransit.ExtensionsDependencyInjectionIntegration.MultipleBusRegist
         where TBus : class, IBusInstance
         where TBusInstance : BusInstance<TBus>, TBus
     {
-        public ServiceCollectionConfigurator(string name, IServiceCollection collection)
+        public ServiceCollectionConfigurator(IServiceCollection collection)
             : base(collection, new DependencyInjectionContainerRegistrar<TBus>(collection))
         {
-            Collection.AddSingleton(provider => new Bind<TBus, IRegistrationConfigurator>(this));
-            Collection.AddSingleton(provider => new Bind<TBus, IRegistration>(CreateRegistration(provider.GetRequiredService<IConfigurationServiceProvider>())));
-
-            Collection.TryAddSingleton<IBusRegistry, BusRegistry>();
+            Collection.AddSingleton(provider => Bind<TBus>.Create<IRegistrationConfigurator>(this));
+            Collection.AddSingleton(provider => Bind<TBus>.Create(CreateRegistration(provider.GetRequiredService<IConfigurationServiceProvider>())));
         }
 
         public void AddBus(Func<IRegistrationContext<TBus, IServiceProvider>, IBusControl> busFactory)
@@ -37,20 +35,25 @@ namespace MassTransit.ExtensionsDependencyInjectionIntegration.MultipleBusRegist
                 return busFactory(context);
             }
 
-            Collection.AddSingleton<IRegistrationContext<TBus, IServiceProvider>>(provider =>
-                new RegistrationContext<TBus, IServiceProvider>(provider.GetRequiredService<Bind<TBus, IRegistration>>(), provider));
+            Collection.AddSingleton<IRegistrationContext<TBus, IServiceProvider>>(provider => new RegistrationContext<TBus, IServiceProvider>(
+                provider.GetRequiredService<Bind<TBus, IRegistration>>(),
+                provider.GetRequiredService<Bind<TBus, BusHealth>>(),
+                provider));
 
-            Collection.AddSingleton(provider => new Bind<TBus, IBusControl>(BusFactory(provider)));
+            Collection.AddSingleton(provider => Bind<TBus>.Create(BusFactory(provider)));
 
             Collection.AddSingleton<TBus>(provider => ActivatorUtilities.CreateInstance<TBusInstance>(provider,
                 provider.GetRequiredService<Bind<TBus, IBusControl>>().Value));
 
-            Collection.AddSingleton(provider => new Bind<TBus, IBus>(provider.GetRequiredService<TBus>()));
-            Collection.AddSingleton(provider => new Bind<TBus, ISendEndpointProvider>(GetSendEndpointProvider(provider)));
-            Collection.AddSingleton(provider => new Bind<TBus, IPublishEndpoint>(GetPublishEndpoint(provider)));
-            Collection.AddSingleton(provider => new Bind<TBus, IClientFactory>(ClientFactoryProvider(
+            Collection.AddSingleton(provider => Bind<TBus>.Create<IBus>(provider.GetRequiredService<TBus>()));
+            Collection.AddSingleton(provider => Bind<TBus>.Create(GetSendEndpointProvider(provider)));
+            Collection.AddSingleton(provider => Bind<TBus>.Create(GetPublishEndpoint(provider)));
+            Collection.AddSingleton(provider => Bind<TBus>.Create(ClientFactoryProvider(
                 provider.GetRequiredService<IConfigurationServiceProvider>(), provider.GetRequiredService<TBus>())));
 
+            Collection.AddSingleton(provider => Bind<TBus>.Create(new BusHealth(typeof(TBus).Name)));
+
+            Collection.AddSingleton<BusRegistryInstance<TBus>>();
             Collection.AddSingleton<IBusRegistryInstance>(provider => provider.GetRequiredService<BusRegistryInstance<TBus>>());
 
             Collection.AddScoped(GetSendEndpointProvider);

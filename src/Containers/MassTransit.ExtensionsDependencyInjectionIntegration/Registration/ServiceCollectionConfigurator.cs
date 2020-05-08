@@ -1,11 +1,13 @@
 namespace MassTransit.ExtensionsDependencyInjectionIntegration.Registration
 {
     using System;
+    using System.Linq;
     using Context;
     using MassTransit.Registration;
     using Mediator;
     using Microsoft.Extensions.DependencyInjection;
     using Microsoft.Extensions.DependencyInjection.Extensions;
+    using Monitoring.Health;
     using ScopeProviders;
     using Scoping;
     using Transports;
@@ -43,10 +45,19 @@ namespace MassTransit.ExtensionsDependencyInjectionIntegration.Registration
                 return busFactory(serviceProvider);
             }
 
+            if (Collection.All(d => d.ServiceType == typeof(IBusControl)))
+            {
+                throw new ConfigurationException(
+                    "AddBus() was already called. To configure multiple bus instances, refer to the documentation: https://masstransit-project.com/usage/containers/multibus.html");
+            }
+
             Collection.AddSingleton(BusFactory);
             Collection.AddSingleton<IBus>(provider => provider.GetRequiredService<IBusControl>());
             Collection.AddSingleton(provider => ClientFactoryProvider(provider.GetRequiredService<IConfigurationServiceProvider>(),
                 provider.GetRequiredService<IBus>()));
+
+            Collection.AddSingleton(provider => new BusHealth(nameof(IBus)));
+            Collection.AddSingleton<IBusHealth>(provider => provider.GetRequiredService<BusHealth>());
         }
 
         public void AddMediator(Action<IServiceProvider, IReceiveEndpointConfigurator> configure = null)
@@ -71,6 +82,8 @@ namespace MassTransit.ExtensionsDependencyInjectionIntegration.Registration
 
         void AddMassTransitComponents(IServiceCollection collection)
         {
+            Collection.TryAddSingleton<IBusRegistry, BusRegistry>();
+
             collection.TryAddScoped<ScopedConsumeContextProvider>();
             collection.TryAddScoped(provider => provider.GetRequiredService<ScopedConsumeContextProvider>().GetContext() ?? new MissingConsumeContext());
 

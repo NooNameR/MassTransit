@@ -4,6 +4,7 @@ namespace MassTransit.Containers.Tests.DependencyInjection_Tests
     using System.Threading.Tasks;
     using MultipleBusRegistration;
     using Microsoft.Extensions.DependencyInjection;
+    using Microsoft.Extensions.DependencyInjection.Extensions;
     using Microsoft.Extensions.Logging;
     using NUnit.Framework;
     using Registration;
@@ -26,14 +27,15 @@ namespace MassTransit.Containers.Tests.DependencyInjection_Tests
             _task1 = GetTask<ConsumeContext<SimpleMessageInterface>>();
             _task2 = GetTask<ConsumeContext<PingMessage>>();
 
-            var collection = new ServiceCollection();
+            var services = new ServiceCollection();
 
-            collection.AddSingleton<ILoggerFactory>(provider => new TestOutputLoggerFactory(true));
+            services.TryAddSingleton<ILoggerFactory>(provider => new TestOutputLoggerFactory(true));
+            services.TryAdd(ServiceDescriptor.Singleton(typeof(ILogger<>), typeof(Logger<>)));
 
-            collection.AddSingleton(_task1);
-            collection.AddSingleton(_task2);
+            services.AddSingleton(_task1);
+            services.AddSingleton(_task2);
 
-            collection.AddMassTransit<IBusOne, BusOne>(x =>
+            services.AddMassTransit<IBusOne, BusOne>(x =>
             {
                 x.AddConsumer<Consumer1>();
                 x.AddBus(context => MassTransit.Bus.Factory.CreateUsingInMemory(cfg =>
@@ -43,7 +45,7 @@ namespace MassTransit.Containers.Tests.DependencyInjection_Tests
                 }));
             });
 
-            collection.AddMassTransit<IBusTwo, BusTwo>(x =>
+            services.AddMassTransit<IBusTwo, BusTwo>(x =>
             {
                 x.AddConsumer<Consumer2>();
                 x.AddBus(context => MassTransit.Bus.Factory.CreateUsingInMemory(cfg =>
@@ -54,21 +56,19 @@ namespace MassTransit.Containers.Tests.DependencyInjection_Tests
                 }));
             });
 
-            _provider = collection.BuildServiceProvider(true);
+            _provider = services.BuildServiceProvider(true);
         }
 
         [OneTimeSetUp]
         public async Task Setup()
         {
-            await _provider.GetService<Bind<IBusOne, IBusControl>>().Value.StartAsync();
-            await _provider.GetService<Bind<IBusTwo, IBusControl>>().Value.StartAsync();
+            await _provider.GetRequiredService<IBusRegistry>().Start(TestCancellationToken);
         }
 
         [OneTimeTearDown]
         public async Task TearDown()
         {
-            await _provider.GetService<Bind<IBusOne, IBusControl>>().Value.StopAsync();
-            await _provider.GetService<Bind<IBusTwo, IBusControl>>().Value.StopAsync();
+            await _provider.GetRequiredService<IBusRegistry>().Stop(TestTimeout);
         }
 
         [Test]

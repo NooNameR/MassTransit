@@ -11,5 +11,7 @@ namespace MassTransit
 
         void ConfigureEndpoints<T>(IReceiveConfigurator<T> configurator, IEndpointNameFormatter endpointNameFormatter = null)
             where T : IReceiveEndpointConfigurator;
+
+        void UseHealthCheck(IBusFactoryConfigurator configurator);
     }
 }

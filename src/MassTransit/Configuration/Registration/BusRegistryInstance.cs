@@ -18,4 +18,18 @@ namespace MassTransit.Registration
         public IBusControl BusControl { get; }
         public TBus BusInstance { get; }
     }
+
+
+    public class BusRegistryInstance :
+        IBusRegistryInstance
+    {
+        public BusRegistryInstance(IBusControl busControl)
+        {
+            BusControl = busControl;
+        }
+
+        public Type InstanceType => typeof(IBus);
+        public IBus Bus => BusControl;
+        public IBusControl BusControl { get; }
+    }
 }

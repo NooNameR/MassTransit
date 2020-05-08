@@ -2,7 +2,6 @@ namespace MassTransit.MultipleBusRegistration
 {
     using System;
     using ExtensionsDependencyInjectionIntegration.MultipleBusRegistration;
-    using Metadata;
     using Microsoft.Extensions.DependencyInjection;
     using Registration;
 
@@ -26,7 +25,7 @@ namespace MassTransit.MultipleBusRegistration
             if (configure == null)
                 throw new ArgumentNullException(nameof(configure));
 
-            var configurator = new ServiceCollectionConfigurator<TBus, TBusInstance>(TypeMetadataCache<TBus>.ShortName, collection);
+            var configurator = new ServiceCollectionConfigurator<TBus, TBusInstance>(collection);
 
             configure(configurator);
 
