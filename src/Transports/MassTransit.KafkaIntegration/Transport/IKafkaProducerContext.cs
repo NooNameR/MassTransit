@@ -5,7 +5,6 @@ namespace MassTransit.KafkaIntegration.Transport
     using System.Threading.Tasks;
     using Confluent.Kafka;
     using Context;
-    using GreenPipes;
     using Pipeline;
     using Pipeline.Observables;
     using Serializers;
@@ -20,8 +19,6 @@ namespace MassTransit.KafkaIntegration.Transport
         ILogContext LogContext { get; }
         SendObservable SendObservers { get; }
         IHeadersSerializer HeadersSerializer { get; }
-
-        ConnectHandle ConnectObservers(KafkaProducerFactory<TKey, TValue> factory);
 
         Task Produce(TopicPartition partition, Message<TKey, TValue> message, CancellationToken cancellationToken);
     }

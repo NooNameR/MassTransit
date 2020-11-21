@@ -52,14 +52,9 @@ namespace MassTransit.KafkaIntegration.Transport
             throw new ConfigurationException($"Producer for topic: {topicAddress} is not configured for ${typeof(Message<TKey, TValue>).Name} message");
         }
 
-        protected override async Task StartRider(CancellationToken cancellationToken)
+        protected override Task StartRider(CancellationToken cancellationToken)
         {
-            foreach (var factory in _producerFactories.Values)
-            {
-                factory.OnStart();
-            }
-
-            await Task.WhenAll(_endpoints.Select(endpoint => endpoint.Start(cancellationToken))).ConfigureAwait(false);
+            return Task.WhenAll(_endpoints.Select(endpoint => endpoint.Start(cancellationToken)));
         }
 
         protected override async Task StopRider(CancellationToken cancellationToken)

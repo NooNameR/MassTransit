@@ -8,7 +8,6 @@ namespace MassTransit.KafkaIntegration.Specifications
     using Confluent.Kafka;
     using Context;
     using GreenPipes;
-    using GreenPipes.Util;
     using MassTransit.Registration;
     using Pipeline;
     using Pipeline.Observables;
@@ -173,10 +172,16 @@ namespace MassTransit.KafkaIntegration.Specifications
             if (_valueSerializer != null)
                 producerBuilder.SetValueSerializer(_valueSerializer);
 
-            var context = new KafkaProducerContext(producerBuilder.Build(), busInstance.HostConfiguration, sendConfiguration, _sendObservers,
-                _headersSerializer, _resolver);
 
-            return new KafkaProducerFactory<TKey, TValue>(new KafkaTopicAddress(busInstance.HostConfiguration.HostAddress, _topicName), context);
+            var context = new KafkaProducerContext(producerBuilder.Build(), busInstance.HostConfiguration, sendConfiguration, _sendObservers,
+                _headersSerializer);
+
+            var producerFactory = new KafkaProducerFactory<TKey, TValue>(new KafkaTopicAddress(busInstance.HostConfiguration.HostAddress, _topicName), context);
+
+            if (_resolver != null)
+                busInstance.BusControl.ConnectPublishObserver(new RouteMessagePublishObserver<TKey, TValue>(producerFactory, _resolver));
+
+            return producerFactory;
         }
 
         public IEnumerable<ValidationResult> Validate()
@@ -201,18 +206,16 @@ namespace MassTransit.KafkaIntegration.Specifications
         {
             readonly IHostConfiguration _hostConfiguration;
             readonly IProducer<TKey, TValue> _producer;
-            readonly KafkaKeyResolver<TKey, TValue> _resolver;
             readonly ISendPipe _sendPipe;
 
             public KafkaProducerContext(IProducer<TKey, TValue> producer, IHostConfiguration hostConfiguration, ISendPipeConfiguration sendConfiguration,
-                SendObservable sendObservers, IHeadersSerializer headersSerializer, KafkaKeyResolver<TKey, TValue> resolver)
+                SendObservable sendObservers, IHeadersSerializer headersSerializer)
             {
                 _producer = producer;
                 _hostConfiguration = hostConfiguration;
                 _sendPipe = sendConfiguration.CreatePipe();
                 SendObservers = sendObservers;
                 HeadersSerializer = headersSerializer;
-                _resolver = resolver;
             }
 
             public Uri HostAddress => _hostConfiguration.HostAddress;
@@ -220,13 +223,6 @@ namespace MassTransit.KafkaIntegration.Specifications
             public SendObservable SendObservers { get; }
 
             public IHeadersSerializer HeadersSerializer { get; }
-
-            public ConnectHandle ConnectObservers(KafkaProducerFactory<TKey, TValue> factory)
-            {
-                return _resolver != null
-                    ? _hostConfiguration.ConnectPublishObserver(new RouteMessagePublishObserver<TKey, TValue>(factory, _resolver))
-                    : new EmptyConnectHandle();
-            }
 
             public Task Produce(TopicPartition partition, Message<TKey, TValue> message, CancellationToken cancellationToken)
             {
