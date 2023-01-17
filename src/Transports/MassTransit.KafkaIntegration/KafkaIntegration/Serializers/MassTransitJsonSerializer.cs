@@ -19,9 +19,16 @@ namespace MassTransit.KafkaIntegration.Serializers
     public class MassTransitAsyncJsonSerializer<T> :
         IAsyncSerializer<T>
     {
+        readonly ISerializer<T> _serializer;
+
+        public MassTransitAsyncJsonSerializer()
+        {
+            _serializer = new MassTransitJsonSerializer<T>();
+        }
+
         public Task<byte[]> SerializeAsync(T data, SerializationContext context)
         {
-            return Task.FromResult(JsonSerializer.SerializeToUtf8Bytes(data, SystemTextJsonMessageSerializer.Options));
+            return Task.FromResult(_serializer.Serialize(data, context));
         }
     }
 }

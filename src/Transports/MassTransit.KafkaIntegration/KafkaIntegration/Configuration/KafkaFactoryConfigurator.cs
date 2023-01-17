@@ -26,6 +26,7 @@ namespace MassTransit.KafkaIntegration.Configuration
         IHeadersSerializer _headersSerializer;
         bool _isHostConfigured;
         Action<IClient, string> _oAuthBearerTokenRefreshHandler;
+        IKafkaSerializerFactory _serializerFactory;
 
         public KafkaFactoryConfigurator(ClientConfig clientConfig)
         {
@@ -37,6 +38,7 @@ namespace MassTransit.KafkaIntegration.Configuration
 
             SetHeadersDeserializer(DictionaryHeadersSerialize.Deserializer);
             SetHeadersSerializer(DictionaryHeadersSerialize.Serializer);
+            SetSerializerFactory(new DefaultKafkaSerializerFactory());
 
             _clientSupervisor = new Recycle<IClientContextSupervisor>(() => new ClientContextSupervisor(_clientConfig));
         }
@@ -106,17 +108,7 @@ namespace MassTransit.KafkaIntegration.Configuration
             if (producerConfig == null)
                 throw new ArgumentNullException(nameof(producerConfig));
 
-            var added = _producers.TryAdd(topicName, topic =>
-            {
-                var configurator = new KafkaProducerSpecification<TKey, TValue>(this, producerConfig, topicName, _oAuthBearerTokenRefreshHandler);
-                configurator.SetHeadersSerializer(_headersSerializer);
-                configure?.Invoke(configurator);
-
-                configurator.ConnectSendObserver(_sendObservers);
-                if (_configureSend != null)
-                    configurator.ConfigureSend(_configureSend);
-                return configurator;
-            });
+            var added = _producers.TryAdd(topicName, topic => CreateSpecification(topicName, producerConfig, configure));
 
             if (!added)
                 throw new ConfigurationException($"A topic producer with the same key was already added: {topicName}");
@@ -130,6 +122,11 @@ namespace MassTransit.KafkaIntegration.Configuration
         public void SetHeadersSerializer(IHeadersSerializer serializer)
         {
             _headersSerializer = serializer ?? throw new ArgumentNullException(nameof(serializer));
+        }
+
+        public void SetSerializerFactory(IKafkaSerializerFactory factory)
+        {
+            _serializerFactory = factory ?? throw new ArgumentNullException(nameof(factory));
         }
 
         public Acks? Acks
@@ -271,7 +268,7 @@ namespace MassTransit.KafkaIntegration.Configuration
             where TValue : class
         {
             if (!_producers.TryGetValue(topic, out var spec))
-                throw new ConfigurationException($"Producer for topic: {topic} is not configured.");
+                spec = CreateSpecification<TKey, TValue>(topic, new ProducerConfig());
 
             if (spec is IKafkaProducerSpecification<TKey, TValue> specification)
                 return specification.CreateSendTransportContext(busInstance);
@@ -300,7 +297,8 @@ namespace MassTransit.KafkaIntegration.Configuration
             consumerConfig.EnableAutoCommit = false;
 
             var specification =
-                new KafkaConsumerSpecification<TKey, TValue>(this, consumerConfig, topicName, _headersDeserializer, configure, _oAuthBearerTokenRefreshHandler);
+                new KafkaConsumerSpecification<TKey, TValue>(this, consumerConfig, topicName, _serializerFactory, _headersDeserializer, configure,
+                    _oAuthBearerTokenRefreshHandler);
             specification.ConnectReceiveEndpointObserver(_endpointObservers);
             return specification;
         }
@@ -330,6 +328,21 @@ namespace MassTransit.KafkaIntegration.Configuration
 
             foreach (var result in _producers.Values.SelectMany(x => x.Validate()))
                 yield return result;
+        }
+
+        IKafkaProducerSpecification CreateSpecification<TKey, TValue>(string topicName, ProducerConfig producerConfig,
+            Action<IKafkaProducerConfigurator<TKey, TValue>> configure = null)
+            where TValue : class
+        {
+            var configurator =
+                new KafkaProducerSpecification<TKey, TValue>(this, producerConfig, topicName, _serializerFactory, _oAuthBearerTokenRefreshHandler);
+            configurator.SetHeadersSerializer(_headersSerializer);
+            configure?.Invoke(configurator);
+
+            configurator.ConnectSendObserver(_sendObservers);
+            if (_configureSend != null)
+                configurator.ConfigureSend(_configureSend);
+            return configurator;
         }
 
         public IBusInstanceSpecification Build(IRiderRegistrationContext context)

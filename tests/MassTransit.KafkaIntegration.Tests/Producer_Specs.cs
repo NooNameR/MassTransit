@@ -293,4 +293,57 @@ namespace MassTransit.KafkaIntegration.Tests
             public Event<StartTest> Started { get; private set; }
         }
     }
+
+
+    public class Producer_Using_Provider_Specs
+    {
+        const string Topic = "topic-producer-provider";
+
+        [Test]
+        public async Task Should_receive_messages_without_registering_producer_explicitly()
+        {
+            await using var provider = new ServiceCollection()
+                .ConfigureKafkaTestOptions(options =>
+                {
+                    options.CreateTopicsIfNotExists = true;
+                    options.TopicNames = new[] { Topic };
+                })
+                .AddMassTransitTestHarness(x =>
+                {
+                    x.AddTaskCompletionSource<ConsumeContext<KafkaMessage>>();
+
+                    x.AddRider(r =>
+                    {
+                        r.AddConsumer<TestKafkaMessageConsumer<KafkaMessage>>();
+
+                        r.UsingKafka((context, k) =>
+                        {
+                            k.TopicEndpoint<KafkaMessage>(Topic, nameof(Producer_Using_Provider_Specs), c =>
+                            {
+                                c.AutoOffsetReset = AutoOffsetReset.Earliest;
+                                c.ConfigureConsumer<TestKafkaMessageConsumer<KafkaMessage>>(context);
+                            });
+                        });
+                    });
+                })
+                .BuildServiceProvider(true);
+
+            var harness = provider.GetTestHarness();
+
+            await harness.Start();
+
+            var producerProvider = harness.Scope.ServiceProvider.GetRequiredService<ITopicProducerProvider>();
+
+            ITopicProducer<KafkaMessage> producer = producerProvider.GetProducer<KafkaMessage>(new Uri($"topic:{Topic}"));
+
+            await producer.Produce(new { Text = "text" }, harness.CancellationToken);
+
+            await provider.GetTask<ConsumeContext<KafkaMessage>>();
+        }
+
+
+        public interface KafkaMessage
+        {
+        }
+    }
 }

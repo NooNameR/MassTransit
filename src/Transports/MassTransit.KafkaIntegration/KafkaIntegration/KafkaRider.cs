@@ -30,19 +30,6 @@ namespace MassTransit.KafkaIntegration
             Reset();
         }
 
-        public ITopicProducer<TKey, TValue> GetProducer<TKey, TValue>(Uri address, ConsumeContext consumeContext)
-            where TValue : class
-        {
-            if (address == null)
-                throw new ArgumentNullException(nameof(address));
-
-            var provider = consumeContext == null
-                ? _producerProvider.Value
-                : new ConsumeContextTopicProducerProvider(_producerProvider.Value, consumeContext);
-
-            return provider.GetProducer<TKey, TValue>(address);
-        }
-
         public HostReceiveEndpointHandle ConnectTopicEndpoint<TKey, TValue>(string topicName, string groupId,
             Action<IRiderRegistrationContext, IKafkaTopicReceiveEndpointConfigurator<TKey, TValue>> configure)
             where TValue : class
@@ -69,6 +56,17 @@ namespace MassTransit.KafkaIntegration
             _endpoints.Add(specification.EndpointName, specification.CreateReceiveEndpoint(_busInstance));
 
             return _endpoints.Start(specification.EndpointName);
+        }
+
+        public ITopicProducer<TKey, TValue> GetProducer<TKey, TValue>(Uri address)
+            where TValue : class
+        {
+            return _producerProvider.Value.GetProducer<TKey, TValue>(address);
+        }
+
+        public ConnectHandle ConnectSendObserver(ISendObserver observer)
+        {
+            return _producerProvider.Value.ConnectSendObserver(observer);
         }
 
         public RiderHandle Start(CancellationToken cancellationToken = default)

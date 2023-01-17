@@ -25,17 +25,17 @@ namespace MassTransit.KafkaIntegration.Configuration
         IAsyncSerializer<TValue> _valueSerializer;
 
         public KafkaProducerSpecification(IKafkaHostConfiguration hostConfiguration, ProducerConfig producerConfig, string topicName,
-            Action<IClient, string> oAuthBearerTokenRefreshHandler)
+            IKafkaSerializerFactory serializerFactory, Action<IClient, string> oAuthBearerTokenRefreshHandler)
         {
             _hostConfiguration = hostConfiguration;
             _producerConfig = producerConfig;
             TopicName = topicName;
             _oAuthBearerTokenRefreshHandler = oAuthBearerTokenRefreshHandler;
+
+            _keySerializer = serializerFactory.GetKeySerializer<TKey>();
+            _valueSerializer = serializerFactory.GetValueSerializer<TValue>();
+
             _sendObservers = new SendObservable();
-
-            SetKeySerializer(SerializerTypes.TryGet<TKey>() ?? new MassTransitAsyncJsonSerializer<TKey>());
-            SetValueSerializer(new MassTransitAsyncJsonSerializer<TValue>());
-
             _serialization = new SerializationConfiguration();
         }
 
@@ -180,6 +180,10 @@ namespace MassTransit.KafkaIntegration.Configuration
         {
             if (string.IsNullOrEmpty(TopicName))
                 yield return this.Failure("Topic", "should not be empty");
+            if (_keySerializer == null)
+                yield return this.Failure("KeySerializer", "should be set or be known type");
+            if (_valueSerializer == null)
+                yield return this.Failure("ValueSerializer", "should be set or be known type");
         }
 
         public ConnectHandle ConnectSendObserver(ISendObserver observer)

@@ -28,7 +28,7 @@ namespace MassTransit.KafkaIntegration.Configuration
         IDeserializer<TValue> _valueDeserializer;
 
         public KafkaTopicReceiveEndpointConfiguration(IKafkaHostConfiguration hostConfiguration, ConsumerConfig consumerConfig, string topic,
-            IBusInstance busInstance, IReceiveEndpointConfiguration endpointConfiguration, Action<IClient, string> oAuthBearerTokenRefreshHandler)
+            IBusInstance busInstance, IReceiveEndpointConfiguration endpointConfiguration, IKafkaSerializerFactory serializerFactory, Action<IClient, string> oAuthBearerTokenRefreshHandler)
             : base(busInstance.HostConfiguration, endpointConfiguration)
         {
             _hostConfiguration = hostConfiguration;
@@ -37,10 +37,11 @@ namespace MassTransit.KafkaIntegration.Configuration
             _oAuthBearerTokenRefreshHandler = oAuthBearerTokenRefreshHandler;
             _consumerConfig = consumerConfig;
             _options = new OptionsSet();
-            Topic = topic;
 
-            SetKeyDeserializer(DeserializerTypes.TryGet<TKey>() ?? new MassTransitJsonDeserializer<TKey>());
-            SetValueDeserializer(new MassTransitJsonDeserializer<TValue>());
+            _keyDeserializer = serializerFactory.GetKeyDeserializer<TKey>();
+            _valueDeserializer = serializerFactory.GetValueDeserializer<TValue>();
+
+            Topic = topic;
 
             CheckpointInterval = TimeSpan.FromMinutes(1);
             CheckpointMessageCount = 5000;
@@ -180,6 +181,12 @@ namespace MassTransit.KafkaIntegration.Configuration
         {
             if (_headersDeserializer == null)
                 yield return this.Failure("HeadersDeserializer", "should not be null");
+
+            if (_keyDeserializer == null)
+                yield return this.Failure("KeyDeserializer", "should be set or be known type");
+
+            if (_valueDeserializer == null)
+                yield return this.Failure("ValueDeserializer", "should be set or be known type");
 
             if (_options.TryGetOptions(out KafkaTopicOptions options))
             {

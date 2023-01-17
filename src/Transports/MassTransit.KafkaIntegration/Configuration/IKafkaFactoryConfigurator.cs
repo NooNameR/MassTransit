@@ -292,5 +292,11 @@ namespace MassTransit
         /// </summary>
         /// <param name="serializer"></param>
         void SetHeadersSerializer(IHeadersSerializer serializer);
+
+        /// <summary>
+        /// Set default set of serializers/deserializers which will be used as default
+        /// </summary>
+        /// <param name="factory"></param>
+        void SetSerializerFactory(IKafkaSerializerFactory factory);
     }
 }

@@ -130,33 +130,27 @@ namespace MassTransit
                 new KeyedTopicProducer<TKey, T>(provider.GetRequiredService<ITopicProducer<TKey, T>>(), keyResolver));
         }
 
-        static ITopicProducer<TKey, T> GetProducer<TKey, T>(string topicName, IKafkaRider rider, IServiceProvider provider)
+        static ITopicProducer<TKey, T> GetProducer<TKey, T>(string topicName, ITopicProducerProvider producerProvider, IServiceProvider provider)
             where T : class
         {
             var address = new Uri($"topic:{topicName}");
 
-            return GetProducer<TKey, T>(address, rider, provider);
+            return GetProducer<TKey, T>(address, producerProvider, provider);
         }
 
-        static ITopicProducer<TKey, T> GetProducer<TKey, T>(Uri address, IKafkaRider rider, IServiceProvider provider)
+        static ITopicProducer<TKey, T> GetProducer<TKey, T>(Uri address, ITopicProducerProvider producerProvider, IServiceProvider provider)
             where T : class
         {
-            ITopicProducer<TKey, T> GetProducerFromRider()
+            ITopicProducer<TKey, T> GetCurrentProducer()
             {
                 var contextProvider = provider.GetService<ScopedConsumeContextProvider>();
-                if (contextProvider != null)
-                {
-                    return contextProvider.HasContext
-                        ? rider.GetProducer<TKey, T>(address, contextProvider.GetContext())
-                        : rider.GetProducer<TKey, T>(address);
-                }
-
-                return rider.GetProducer<TKey, T>(address, provider.GetService<ConsumeContext>());
+                var topicProducerProvider = contextProvider is { HasContext: true }
+                    ? new ConsumeContextTopicProducerProvider(producerProvider, contextProvider.GetContext())
+                    : producerProvider;
+                return topicProducerProvider.GetProducer<TKey, T>(address);
             }
 
-            ITopicProducer<TKey, T> result = GetProducerFromRider();
-
-            return new ScopedTopicProducer<TKey, T>(result, provider);
+            return new ScopedTopicProducer<TKey, T>(GetCurrentProducer(), provider);
         }
     }
 }
