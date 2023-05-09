@@ -1,6 +1,7 @@
 namespace MassTransit.AmazonSqsTransport
 {
     using System;
+    using System.Diagnostics;
     using System.Threading;
     using System.Threading.Tasks;
     using Amazon.SQS;
@@ -15,16 +16,18 @@ namespace MassTransit.AmazonSqsTransport
         static readonly TimeSpan MaxVisibilityTimeout = TimeSpan.FromHours(12);
         readonly CancellationTokenSource _activeTokenSource;
         readonly ClientContext _clientContext;
+        readonly Uri _inputAddress;
         readonly Message _message;
 
-        readonly ReceiveContext _receiveContext;
         readonly ReceiveSettings _settings;
+        readonly Stopwatch _timer;
         readonly Task _visibilityTask;
         bool _locked;
 
-        public AmazonSqsReceiveLockContext(ReceiveContext receiveContext, Message message, ReceiveSettings settings, ClientContext clientContext)
+        public AmazonSqsReceiveLockContext(Uri inputAddress, Message message, ReceiveSettings settings, ClientContext clientContext)
         {
-            _receiveContext = receiveContext;
+            _timer = Stopwatch.StartNew();
+            _inputAddress = inputAddress;
             _message = message;
             _settings = settings;
             _clientContext = clientContext;
@@ -60,8 +63,8 @@ namespace MassTransit.AmazonSqsTransport
 
                 if (!_clientContext.CancellationToken.IsCancellationRequested)
                 {
-                    await _clientContext.ChangeMessageVisibility(_settings.QueueUrl, _message.ReceiptHandle,
-                        _settings.RedeliverVisibilityTimeout).ConfigureAwait(false);
+                    await _clientContext.ChangeMessageVisibility(_settings.QueueUrl, _message.ReceiptHandle, _settings.RedeliverVisibilityTimeout)
+                        .ConfigureAwait(false);
                 }
 
                 _locked = false;
@@ -85,7 +88,7 @@ namespace MassTransit.AmazonSqsTransport
             if (_locked)
                 return Task.CompletedTask;
 
-            throw new TransportException(_receiveContext.InputAddress, $"Message Lock Lost: {_message.ReceiptHandle}");
+            throw new TransportException(_inputAddress, $"Message Lock Lost: {_message.ReceiptHandle}");
         }
 
         async Task RenewMessageVisibility()
@@ -118,7 +121,7 @@ namespace MassTransit.AmazonSqsTransport
                     await _clientContext.ChangeMessageVisibility(_settings.QueueUrl, _message.ReceiptHandle, visibilityTimeout).ConfigureAwait(false);
 
                     // Max 12 hours, https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html
-                    if (_receiveContext.ElapsedTime + TimeSpan.FromSeconds(visibilityTimeout) >= MaxVisibilityTimeout)
+                    if (_timer.Elapsed + TimeSpan.FromSeconds(visibilityTimeout) >= MaxVisibilityTimeout)
                         break;
 
                     delay = CalculateDelay(visibilityTimeout);
@@ -142,8 +145,7 @@ namespace MassTransit.AmazonSqsTransport
                 catch (AmazonSQSException exception)
                 {
                     LogContext.Error?.Log(exception, "Failed to extend message {ReceiptHandle} visibility to {VisibilityTimeout} ({ElapsedTime})",
-                        _message.ReceiptHandle, TimeSpan.FromSeconds(visibilityTimeout).ToFriendlyString(),
-                        _receiveContext.ElapsedTime);
+                        _message.ReceiptHandle, TimeSpan.FromSeconds(visibilityTimeout).ToFriendlyString(), _timer.Elapsed);
 
                     break;
                 }
